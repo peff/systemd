@@ -73,7 +73,7 @@ int verify_prepare_filename(const char *filename, char **ret) {
 }
 
 static int find_unit(const char *p, char **ret) {
-        _cleanup_free_ char *a = NULL, *t = NULL;
+        _cleanup_free_ char *a = NULL, *t = NULL, *name = NULL, *dir = NULL;
         int r;
 
         assert(p);
@@ -89,18 +89,23 @@ static int find_unit(const char *p, char **ret) {
                 return 0;
         }
 
-        if (!unit_name_is_valid(p, UNIT_NAME_INSTANCE))
+        if (path_extract_filename(a, &name) < 0 ||
+            !unit_name_is_valid(name, UNIT_NAME_INSTANCE))
                 return r; /* return the original error code given by the above access(). */
 
         /* If the specified unit is an instance of a template unit, then let's try to find the template unit. */
-        r = unit_name_template(p, &t);
+        r = unit_name_template(name, &t);
+        if (r < 0)
+                return r;
+
+        r = path_extract_directory(a, &dir);
         if (r < 0)
                 return r;
 
         a = mfree(a);
-        r = path_make_absolute_cwd(t, &a);
-        if (r < 0)
-                return r;
+        a = path_join(dir, t);
+        if (!a)
+                return -ENOMEM;
 
         if (access(a, F_OK) < 0)
                 return -errno;
